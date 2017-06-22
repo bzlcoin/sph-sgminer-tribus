@@ -124,7 +124,7 @@ __kernel void search(__global unsigned char* block, volatile __global uint* outp
 
     #pragma unroll
     for (int i = 0; i < 10; i++)
-      hash.h8[i] = DEC64LE(&block[i*8]); // data seems already swapped
+        hash.h8[i] = DEC64LE(&block[i*8]); // data seems already swapped
     hash.h4[19] = gid;
 
     // jh512 80 - by tpruvot
@@ -267,19 +267,14 @@ __kernel void search(__global unsigned char* block, volatile __global uint* outp
     WF1 = 0;
 
     for (unsigned u = 0; u < 10; u ++) {
-      BIG_ROUND;
+        BIG_ROUND;
     }
 
-    hash.h8[0] = hash.h8[0] ^ Vb00 ^ W00 ^ W80;
-    hash.h8[1] = hash.h8[1] ^ Vb01 ^ W01 ^ W81;
-    hash.h8[2] = hash.h8[2] ^ Vb10 ^ W10 ^ W90;
+    //hash.h8[0] = hash.h8[0] ^ Vb00 ^ W00 ^ W80;
+    //hash.h8[1] = hash.h8[1] ^ Vb01 ^ W01 ^ W81;
+    //hash.h8[2] = hash.h8[2] ^ Vb10 ^ W10 ^ W90;
     hash.h8[3] = hash.h8[3] ^ Vb11 ^ W11 ^ W91;
 
-#if 1
-    bool result = (hash.h8[3] <= target);
-#else
-    bool result = (hash.h4[6] == 0);
-#endif
-    if (result)
+    if (hash.h8[3] <= target)
         output[output[0xFF]++] = SWAP4(gid);
 }
