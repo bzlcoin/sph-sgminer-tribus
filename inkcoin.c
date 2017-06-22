@@ -121,7 +121,7 @@ bool scanhash_inkcoin(struct thr_info *thr, const unsigned char __maybe_unused *
 
 		*nonce = ++n;
 		data[19] = (n);
-		xhash(ostate, data);
+		inkhash(ostate, data);
 		tmp_hash7 = (ostate[7]);
 
 		applog(LOG_INFO, "data7 %08lx",

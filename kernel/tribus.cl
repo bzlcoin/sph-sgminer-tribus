@@ -3,8 +3,7 @@
  *
  * ==========================(LICENSE BEGIN)============================
  *
- * Copyright (c) 2014  phm
- * Copyright (c) 2014 Girino Vey
+ * Copyright (c) 2017 tpruvot
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -26,12 +25,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  * ===========================(LICENSE END)=============================
- *
- * @author   phm <phm@inbox.com>
  */
-
-#ifndef TRIBUS_CL
-#define TRIBUS_CL
 
 #define DEBUG(x)
 
@@ -84,12 +78,12 @@ typedef int sph_s32;
 
 #if SPH_BIG_ENDIAN
   #define DEC64E(x) (x)
+  #define DEC64LE(x) SWAP8(*(const __global sph_u64 *) (x));
   #define DEC64BE(x) (*(const __global sph_u64 *) (x));
-  #define DEC32LE(x) SWAP4(*(const __global sph_u32 *) (x));
 #else
   #define DEC64E(x) SWAP8(x)
+  #define DEC64LE(x) (*(const __global sph_u64 *) (x));
   #define DEC64BE(x) SWAP8(*(const __global sph_u64 *) (x));
-  #define DEC32LE(x) (*(const __global sph_u32 *) (x));
 #endif
 
 #define SHL(x, n) ((x) << (n))
@@ -111,9 +105,9 @@ __kernel void search(__global unsigned char* block, volatile __global uint* outp
 {
     uint gid = get_global_id(0);
     union {
-        unsigned char h1[64];
-        uint h4[16];
-        ulong h8[8];
+        unsigned char h1[80];
+        uint h4[20];
+        ulong h8[10];
     } hash;
 
     __local sph_u32 AES0[256], AES1[256], AES2[256], AES3[256];
@@ -128,51 +122,66 @@ __kernel void search(__global unsigned char* block, volatile __global uint* outp
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
- 
-   // jh
+    #pragma unroll
+    for (int i = 0; i < 10; i++)
+      hash.h8[i] = DEC64LE(&block[i*8]); // data seems already swapped
+    hash.h4[19] = gid;
 
-    sph_u64 h0h = C64e(0x6fd14b963e00aa17), h0l = C64e(0x636a2e057a15d543), h1h = C64e(0x8a225e8d0c97ef0b), h1l = C64e(0xe9341259f2b3c361), h2h = C64e(0x891da0c1536f801e), h2l = C64e(0x2aa9056bea2b6d80), h3h = C64e(0x588eccdb2075baa6), h3l = C64e(0xa90f3a76baf83bf7);
-    sph_u64 h4h = C64e(0x0169e60541e34a69), h4l = C64e(0x46b58a8e2e6fe65a), h5h = C64e(0x1047a7d0c1843c24), h5l = C64e(0x3b6e71b12d5ac199), h6h = C64e(0xcf57f6ec9db1f856), h6l = C64e(0xa706887c5716b156), h7h = C64e(0xe3c2fcdfe68517fb), h7l = C64e(0x545a4678cc8cdd4b);
+    // jh512 80 - by tpruvot
+
+    sph_u64 h0h = C64e(0x6fd14b963e00aa17), h0l = C64e(0x636a2e057a15d543);
+    sph_u64 h1h = C64e(0x8a225e8d0c97ef0b), h1l = C64e(0xe9341259f2b3c361);
+    sph_u64 h2h = C64e(0x891da0c1536f801e), h2l = C64e(0x2aa9056bea2b6d80);
+    sph_u64 h3h = C64e(0x588eccdb2075baa6), h3l = C64e(0xa90f3a76baf83bf7);
+    sph_u64 h4h = C64e(0x0169e60541e34a69), h4l = C64e(0x46b58a8e2e6fe65a);
+    sph_u64 h5h = C64e(0x1047a7d0c1843c24), h5l = C64e(0x3b6e71b12d5ac199);
+    sph_u64 h6h = C64e(0xcf57f6ec9db1f856), h6l = C64e(0xa706887c5716b156);
+    sph_u64 h7h = C64e(0xe3c2fcdfe68517fb), h7l = C64e(0x545a4678cc8cdd4b);
     sph_u64 tmp;
 
-    for(int i = 0; i < 2; i++)
-    {
-        if (i == 0) {
-            h0h ^= DEC64E(hash.h8[0]);
-            h0l ^= DEC64E(hash.h8[1]);
-            h1h ^= DEC64E(hash.h8[2]);
-            h1l ^= DEC64E(hash.h8[3]);
-            h2h ^= DEC64E(hash.h8[4]);
-            h2l ^= DEC64E(hash.h8[5]);
-            h3h ^= DEC64E(hash.h8[6]);
-            h3l ^= DEC64E(hash.h8[7]);
-        } else if(i == 1) {
-            h4h ^= DEC64E(hash.h8[0]);
-            h4l ^= DEC64E(hash.h8[1]);
-            h5h ^= DEC64E(hash.h8[2]);
-            h5l ^= DEC64E(hash.h8[3]);
-            h6h ^= DEC64E(hash.h8[4]);
-            h6l ^= DEC64E(hash.h8[5]);
-            h7h ^= DEC64E(hash.h8[6]);
-            h7l ^= DEC64E(hash.h8[7]);
-        
-            h0h ^= 0x80;
-            h3l ^= 0x2000000000000;
-        }
-        E8;
-    }
-    h4h ^= 0x80;
-    h7l ^= 0x2000000000000;
+    // Round 1 (64 first bytes)
+    h0h ^= hash.h8[0];
+    h0l ^= hash.h8[1];
+    h1h ^= hash.h8[2];
+    h1l ^= hash.h8[3];
+    h2h ^= hash.h8[4];
+    h2l ^= hash.h8[5];
+    h3h ^= hash.h8[6];
+    h3l ^= hash.h8[7];
+    E8;
+    h4h ^= hash.h8[0];
+    h4l ^= hash.h8[1];
+    h5h ^= hash.h8[2];
+    h5l ^= hash.h8[3];
+    h6h ^= hash.h8[4];
+    h6l ^= hash.h8[5];
+    h7h ^= hash.h8[6];
+    h7l ^= hash.h8[7];
 
-    hash.h8[0] = DEC64E(h4h);
-    hash.h8[1] = DEC64E(h4l);
-    hash.h8[2] = DEC64E(h5h);
-    hash.h8[3] = DEC64E(h5l);
-    hash.h8[4] = DEC64E(h6h);
-    hash.h8[5] = DEC64E(h6l);
-    hash.h8[6] = DEC64E(h7h);
-    hash.h8[7] = DEC64E(h7l);
-    
+    // Round 2 (16 bytes with nonce)
+    h0h ^= hash.h8[8];
+    h0l ^= hash.h8[9];
+    h1h ^= 0x80U;
+    E8;
+    h4h ^= hash.h8[8];
+    h4l ^= hash.h8[9];
+    h5h ^= 0x80U;
+
+    // Round 3 (close, 640 bits input)
+    h3l ^= 0x8002000000000000UL;
+    E8;
+    h7l ^= 0x8002000000000000UL;
+
+    hash.h8[0] = (h4h);
+    hash.h8[1] = (h4l);
+    hash.h8[2] = (h5h);
+    hash.h8[3] = (h5l);
+
+    hash.h8[4] = (h6h);
+    hash.h8[5] = (h6l);
+    hash.h8[6] = (h7h);
+    hash.h8[7] = (h7l);
+
     // keccak
 
     sph_u64 a00 = 0, a01 = 0, a02 = 0, a03 = 0, a04 = 0;
@@ -188,31 +197,33 @@ __kernel void search(__global unsigned char* block, volatile __global uint* outp
     a23 = SPH_C64(0xFFFFFFFFFFFFFFFF);
     a04 = SPH_C64(0xFFFFFFFFFFFFFFFF);
 
-    a00 ^= SWAP8(hash.h8[0]);
-    a10 ^= SWAP8(hash.h8[1]);
-    a20 ^= SWAP8(hash.h8[2]);
-    a30 ^= SWAP8(hash.h8[3]);
-    a40 ^= SWAP8(hash.h8[4]);
-    a01 ^= SWAP8(hash.h8[5]);
-    a11 ^= SWAP8(hash.h8[6]);
-    a21 ^= SWAP8(hash.h8[7]);
+    a00 ^= (hash.h8[0]);
+    a10 ^= (hash.h8[1]);
+    a20 ^= (hash.h8[2]);
+    a30 ^= (hash.h8[3]);
+    a40 ^= (hash.h8[4]);
+    a01 ^= (hash.h8[5]);
+    a11 ^= (hash.h8[6]);
+    a21 ^= (hash.h8[7]);
     a31 ^= 0x8000000000000001;
     KECCAK_F_1600;
     // Finalize the "lane complement"
     a10 = ~a10;
     a20 = ~a20;
 
-    hash.h8[0] = SWAP8(a00);
-    hash.h8[1] = SWAP8(a10);
-    hash.h8[2] = SWAP8(a20);
-    hash.h8[3] = SWAP8(a30);
-    hash.h8[4] = SWAP8(a40);
-    hash.h8[5] = SWAP8(a01);
-    hash.h8[6] = SWAP8(a11);
-    hash.h8[7] = SWAP8(a21);
+    hash.h8[0] = (a00);
+    hash.h8[1] = (a10);
+    hash.h8[2] = (a20);
+    hash.h8[3] = (a30);
+    hash.h8[4] = (a40);
+    hash.h8[5] = (a01);
+    hash.h8[6] = (a11);
+    hash.h8[7] = (a21);
 
     // echo
-    sph_u64 W00, W01, W10, W11, W20, W21, W30, W31, W40, W41, W50, W51, W60, W61, W70, W71, W80, W81, W90, W91, WA0, WA1, WB0, WB1, WC0, WC1, WD0, WD1, WE0, WE1, WF0, WF1;
+
+    sph_u64 W00, W01, W10, W11, W20, W21, W30, W31, W40, W41, W50, W51, W60, W61, W70, W71;
+    sph_u64 W80, W81, W90, W91, WA0, WA1, WB0, WB1, WC0, WC1, WD0, WD1, WE0, WE1, WF0, WF1;
     sph_u64 Vb00, Vb01, Vb10, Vb11, Vb20, Vb21, Vb30, Vb31, Vb40, Vb41, Vb50, Vb51, Vb60, Vb61, Vb70, Vb71;
     Vb00 = Vb10 = Vb20 = Vb30 = Vb40 = Vb50 = Vb60 = Vb70 = 512UL;
     Vb01 = Vb11 = Vb21 = Vb31 = Vb41 = Vb51 = Vb61 = Vb71 = 0;
@@ -256,20 +267,19 @@ __kernel void search(__global unsigned char* block, volatile __global uint* outp
     WF1 = 0;
 
     for (unsigned u = 0; u < 10; u ++) {
-        BIG_ROUND;
+      BIG_ROUND;
     }
 
-    Vb00 ^= hash.h8[0] ^ W00 ^ W80;
-    Vb01 ^= hash.h8[1] ^ W01 ^ W81;
-    Vb10 ^= hash.h8[2] ^ W10 ^ W90;
-    Vb11 ^= hash.h8[3] ^ W11 ^ W91;
-    Vb20 ^= hash.h8[4] ^ W20 ^ WA0;
-    Vb21 ^= hash.h8[5] ^ W21 ^ WA1;
-    Vb30 ^= hash.h8[6] ^ W30 ^ WB0;
-    Vb31 ^= hash.h8[7] ^ W31 ^ WB1;
+    hash.h8[0] = hash.h8[0] ^ Vb00 ^ W00 ^ W80;
+    hash.h8[1] = hash.h8[1] ^ Vb01 ^ W01 ^ W81;
+    hash.h8[2] = hash.h8[2] ^ Vb10 ^ W10 ^ W90;
+    hash.h8[3] = hash.h8[3] ^ Vb11 ^ W11 ^ W91;
 
-    bool result = (Vb11 <= target);
+#if 1
+    bool result = (hash.h8[3] <= target);
+#else
+    bool result = (hash.h4[6] == 0);
+#endif
     if (result)
         output[output[0xFF]++] = SWAP4(gid);
 }
-#endif // TRIBUS_CL

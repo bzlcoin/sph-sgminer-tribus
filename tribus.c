@@ -57,27 +57,38 @@ inline void trihash(void *state, const void *input)
     
     unsigned char hash[64];
 
-	
+    // JH;
     sph_jh512_init(&ctx_jh);
-    // ZJH;
     sph_jh512 (&ctx_jh, input, 80);
     sph_jh512_close(&ctx_jh, (void*) hash);
 
+    // KECCAK;
     sph_keccak512_init(&ctx_keccak);
-    // ZKECCAK;
     sph_keccak512 (&ctx_keccak, (const void*) hash, 64);
     sph_keccak512_close(&ctx_keccak, (void*) hash);
 
+    // ECHO
     sph_echo512_init(&ctx_echo);
-    // SKEIN;
     sph_echo512 (&ctx_echo, (const void*) hash, 64);
     sph_echo512_close(&ctx_echo, (void*) hash);
 
     memcpy(state, hash, 32);
 }
 
-static const uint32_t diff1targ = 0x0000ffff;
+void tribus_regenhash(struct work *work)
+{
+    uint32_t data[20];
+    char *scratchbuf;
+    uint32_t *nonce = (uint32_t *)(work->data + 76);
+    uint32_t *ohash = (uint32_t *)(work->hash);
 
+    be32enc_vect(data, (const uint32_t *)work->data, 19);
+    data[19] = htobe32(*nonce);
+    trihash(ohash, data);
+}
+
+#if 0
+static const uint32_t diff1targ = 0x0000ffff;
 
 /* Used externally as confirmation of correct OCL code */
 int tribus_test(unsigned char *pdata, const unsigned char *ptarget, uint32_t nonce)
@@ -101,18 +112,6 @@ int tribus_test(unsigned char *pdata, const unsigned char *ptarget, uint32_t non
 	if (tmp_hash7 > Htarg)
 		return 0;
 	return 1;
-}
-
-void tribus_regenhash(struct work *work)
-{
-        uint32_t data[20];
-        char *scratchbuf;
-        uint32_t *nonce = (uint32_t *)(work->data + 76);
-        uint32_t *ohash = (uint32_t *)(work->hash);
-
-        be32enc_vect(data, (const uint32_t *)work->data, 19);
-        data[19] = htobe32(*nonce);
-        trihash(ohash, data);
 }
 
 bool scanhash_tribus(struct thr_info *thr, const unsigned char __maybe_unused *pmidstate,
@@ -155,5 +154,5 @@ bool scanhash_tribus(struct thr_info *thr, const unsigned char __maybe_unused *p
 
 	return ret;
 }
-
+#endif
 
